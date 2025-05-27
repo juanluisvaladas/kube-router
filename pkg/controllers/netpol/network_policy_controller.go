@@ -162,8 +162,10 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	klog.Info("Starting network policy controller")
 	npc.healthChan = healthChan
 
+	klog.Info("VALADAS healthChan:", npc.healthChan)
 	// setup kube-router specific top level custom chains (KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT)
 	npc.ensureTopLevelChains()
+	klog.Info("VALADAS ensureTopLevelChains finished")
 
 	// setup default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
@@ -338,9 +340,11 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 
 func (npc *NetworkPolicyController) iptablesCmdHandlerForCIDR(cidr *net.IPNet) (utils.IPTablesHandler, error) {
 	if netutils.IsIPv4CIDR(cidr) {
+		klog.Info("VALADAS - IPv4")
 		return npc.iptablesCmdHandlers[v1core.IPv4Protocol], nil
 	}
 	if netutils.IsIPv6CIDR(cidr) {
+		klog.Info("VALADAS - IPv6")
 		return npc.iptablesCmdHandlers[v1core.IPv6Protocol], nil
 	}
 
@@ -354,18 +358,37 @@ func (npc *NetworkPolicyController) allowTrafficToClusterIPRange(
 	ensureRuleAtPosition func(iptablesCmdHandler utils.IPTablesHandler,
 		chain string, ruleSpec []string, uuid string, position int),
 	comment string) {
+
+	klog.Info("VALADAS ATCIPR 1")
 	whitelistServiceVips := []string{"-m", "comment", "--comment", comment,
 		"-d", serviceClusterIPRange.String(), "-j", "RETURN"}
+
+	klog.Info("VALADAS ATCIPR 2")
 	uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+	klog.Info("VALADAS ATCIPR 3")
 	if err != nil {
+		klog.Info("VALADAS ATCIPR 3 - err")
 		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
 	iptablesCmdHandler, err := npc.iptablesCmdHandlerForCIDR(serviceClusterIPRange)
+	klog.Info("VALADAS ATCIPR 4")
 	if err != nil {
+		klog.Info("VALADAS ATCIPR 4 - err")
 		klog.Fatalf("Failed to get iptables handler: %s", err.Error())
 	}
+	if iptablesCmdHandler == nil {
+		klog.Info("VALADAS ATCIPR - iptablesCmdHandler is nil WTF")
+	}
+
+	klog.Info("VALADAS ATCIPR 5")
+	klog.Info("VALADAS ATCIPR iptablesCmdHandler ", iptablesCmdHandler)
+	klog.Info("VALADAS ATCIPR kubeInputChainName ", kubeInputChainName)
+	klog.Info("VALADAS ATCIPR whitelistServiceVips ", whitelistServiceVips)
+	klog.Info("VALADAS ATCIPR uuid", uuid)
+	klog.Info("VALADAS ATCIPR serviceVIPPosition", serviceVIPPosition)
 	ensureRuleAtPosition(iptablesCmdHandler,
 		kubeInputChainName, whitelistServiceVips, uuid, serviceVIPPosition)
+	klog.Info("VALADAS ATCIPR 6")
 }
 
 // Creates custom chains KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT
@@ -374,9 +397,11 @@ func (npc *NetworkPolicyController) allowTrafficToClusterIPRange(
 // -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
 // -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
 func (npc *NetworkPolicyController) ensureTopLevelChains() {
+	klog.Info("VALADAS ensure top level chains 1")
 	const serviceVIPPosition = 1
 	rulePosition := map[v1core.IPFamily]int{v1core.IPv4Protocol: 1, v1core.IPv6Protocol: 1}
 
+	klog.Info("VALADAS ensure top level chains 2")
 	addUUIDForRuleSpec := func(chain string, ruleSpec *[]string) (string, error) {
 		hash := sha256.Sum256([]byte(chain + strings.Join(*ruleSpec, "")))
 		encoded := base32.StdEncoding.EncodeToString(hash[:])[:16]
@@ -390,6 +415,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			strings.Join(*ruleSpec, " "))
 	}
 
+	klog.Info("VALADAS ensure top level chains 3")
 	ensureRuleAtPosition := func(
 		iptablesCmdHandler utils.IPTablesHandler, chain string, ruleSpec []string, uuid string, position int) {
 		exists, err := iptablesCmdHandler.Exists("filter", chain, ruleSpec...)
@@ -439,6 +465,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		}
 	}
 
+	klog.Info("VALADAS ensure top level chains 4")
 	for _, handler := range npc.iptablesCmdHandlers {
 		for builtinChain, customChain := range defaultChains {
 			exists, err := handler.ChainExists("filter", customChain)
@@ -465,24 +492,37 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		}
 	}
 
+	klog.Info("VALADAS ensure top level chains 5")
+	klog.Info("VALADAS serviceClusterIPRanges is nil: ", npc.serviceClusterIPRanges == nil)
+	klog.Info("VALADAS len Service Cluster IP Ranges: ", len(npc.serviceClusterIPRanges))
+	klog.Info("VALADAS Service Cluster IP Ranges: ", npc.serviceClusterIPRanges)
 	if len(npc.serviceClusterIPRanges) > 0 {
 		for idx, serviceRange := range npc.serviceClusterIPRanges {
+			klog.Info("VALADAS idx: ", idx, " Service range:", serviceRange)
 			var family v1core.IPFamily
+			klog.Info("VALADAS WAT 1")
 			if serviceRange.IP.To4() != nil {
+				klog.Info("VALADAS WAT 2")
 				family = v1core.IPv4Protocol
 			} else {
+				klog.Info("VALADAS WAT 3")
 				family = v1core.IPv6Protocol
 			}
+			klog.Info("VALADAS WAT 4")
 			klog.V(2).Infof("Allow traffic to ingress towards Cluster IP Range: %s for family: %s",
 				serviceRange.String(), family)
+			klog.Info("VALADAS WAT 5")
 			npc.allowTrafficToClusterIPRange(rulePosition[family], &npc.serviceClusterIPRanges[idx],
 				addUUIDForRuleSpec, ensureRuleAtPosition, "allow traffic to primary/secondary cluster IP range")
+			klog.Info("VALADAS WAT 6")
 			rulePosition[family]++
+			klog.Info("VALADAS WAT 7")
 		}
 	} else {
 		klog.Fatalf("Primary service cluster IP range is not configured")
 	}
 
+	klog.Info("VALADAS ensure top level chains 6")
 	for family, handler := range npc.iptablesCmdHandlers {
 		whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment",
 			"allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
@@ -511,6 +551,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		rulePosition[family]++
 	}
 
+	klog.Info("VALADAS ensure top level chains 7")
 	for idx, externalIPRange := range npc.serviceExternalIPRanges {
 		var family v1core.IPFamily
 		if externalIPRange.IP.To4() != nil {
@@ -536,6 +577,8 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
 		rulePosition[family]++
 	}
+
+	klog.Info("VALADAS ensure top level chains 8")
 
 	for idx, loadBalancerIPRange := range npc.serviceLoadBalancerIPRanges {
 		var family v1core.IPFamily
@@ -810,7 +853,9 @@ func NewIPTablesHandlers(config *options.KubeRouterConfig) (
 		}
 		ipSetHandlers[v1core.IPv4Protocol] = ipset
 	}
+	klog.Info("VALADAS - handler v6 - 1")
 	if config == nil || config.EnableIPv6 {
+		klog.Info("VALADAS - handler v6 - 2")
 		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create iptables handler: %w", err)
